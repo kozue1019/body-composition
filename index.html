@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>体組成トラッカー</title>
+    
+    <!-- PWA / Mobile App Settings -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="体組成ログ">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3004/3004451.png">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif; 
+            -webkit-tap-highlight-color: transparent;
+        }
+        .card { @apply bg-white rounded-2xl shadow-sm border border-gray-100 p-6; }
+        
+        /* Disable text selection to feel more like an app */
+        .no-select {
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen pb-12 no-select">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-10 pt-safe">
+        <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+            <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                体組成ログ
+            </h1>
+            <button onclick="toggleModal('entryModal')" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm">
+                追加
+            </button>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 mt-8">
+        <!-- Summary Stats -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8" id="statsGrid">
+            <!-- Stats will be injected here -->
+        </div>
+
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="card">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-gray-700 font-semibold">体重推移 (kg)</h3>
+                </div>
+                <div class="h-64">
+                    <canvas id="weightChart"></canvas>
+                </div>
+            </div>
+            <div class="card">
+                <h3 class="text-gray-700 font-semibold mb-4">体脂肪・筋肉量 (%)</h3>
+                <div class="h-64">
+                    <canvas id="compositionChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Table -->
+        <div class="card overflow-hidden">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-gray-700 font-semibold">全履歴</h3>
+                <button onclick="resetData()" class="text-xs text-red-400 hover:underline">リセット</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left text-sm">
+                    <thead>
+                        <tr class="border-b border-gray-100 text-gray-500 uppercase tracking-wider">
+                            <th class="py-3 px-4">日付</th>
+                            <th class="py-3 px-4 text-right">体重</th>
+                            <th class="py-3 px-4 text-right">体脂肪</th>
+                            <th class="py-3 px-4 text-right">筋肉率</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dataTableBody" class="divide-y divide-gray-50 text-gray-700">
+                        <!-- Rows will be injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for Entry -->
+    <div id="entryModal" class="fixed inset-0 bg-black/60 hidden flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+        <div class="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
+            <h2 class="text-xl font-bold mb-6 text-center text-gray-800">記録の入力</h2>
+            <form id="healthForm" class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-gray-400 ml-1">日付</label>
+                        <input type="date" id="input_date" required class="w-full bg-gray-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-gray-400 ml-1">体重 (kg)</label>
+                        <input type="number" step="0.1" id="input_weight" placeholder="00.0" required class="w-full bg-gray-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none text-lg">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-gray-400 ml-1">体脂肪率 (%)</label>
+                        <input type="number" step="0.1" id="input_fat" placeholder="00.0" required class="w-full bg-gray-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none text-lg">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-gray-400 ml-1">骨格筋率 (%)</label>
+                        <input type="number" step="0.1" id="input_muscle" placeholder="00.0" required class="w-full bg-gray-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none text-lg">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3 pt-2">
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-gray-400 ml-1">体年齢</label>
+                        <input type="number" id="input_age" class="w-full bg-gray-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-gray-400 ml-1">内臓脂肪</label>
+                        <input type="number" id="input_v_fat" class="w-full bg-gray-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="text-xs font-semibold text-gray-400 ml-1">BMI</label>
+                        <input type="number" step="0.1" id="input_bmi" class="w-full bg-gray-50 border-none rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+                <div class="flex gap-3 mt-8">
+                    <button type="button" onclick="toggleModal('entryModal')" class="flex-1 px-4 py-3 bg-gray-100 text-gray-500 rounded-xl font-semibold hover:bg-gray-200 transition-colors">キャンセル</button>
+                    <button type="submit" class="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-200">保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const initialData = [
+            { date: '2025-11-03', weight: 61.4, fat: 33.1, muscle: 26.2, age: 41, v_fat: 4, bmr: 1289, bmi: 21.0 },
+            { date: '2025-11-17', weight: 59.8, fat: 32.7, muscle: 26.5, age: 39, v_fat: 4, bmr: 1267, bmi: 21.7 },
+            { date: '2026-04-02', weight: 57.8, fat: 30.5, muscle: 27.3, age: 36, v_fat: 3, bmr: 1245, bmi: 21.0 }
+        ];
+
+        let history = JSON.parse(localStorage.getItem('health_history')) || initialData;
+        let weightChart, compositionChart;
+
+        function toggleModal(id) {
+            const el = document.getElementById(id);
+            el.classList.toggle('hidden');
+            if (!el.classList.contains('hidden')) {
+                document.getElementById('input_date').valueAsDate = new Date();
+                // Scroll to top to avoid issues on iOS
+                window.scrollTo(0, 0);
+            }
+        }
+
+        function updateUI() {
+            history.sort((a, b) => new Date(a.date) - new Date(b.date));
+            updateStats();
+            updateTable();
+            renderCharts();
+            localStorage.setItem('health_history', JSON.stringify(history));
+        }
+
+        function updateStats() {
+            if (history.length === 0) return;
+            const latest = history[history.length - 1];
+            const prev = history.length > 1 ? history[history.length - 2] : latest;
+
+            const stats = [
+                { label: '体重', val: latest.weight, unit: 'kg', diff: (latest.weight - prev.weight).toFixed(1) },
+                { label: '体脂肪', val: latest.fat, unit: '%', diff: (latest.fat - prev.fat).toFixed(1) },
+                { label: '筋肉率', val: latest.muscle, unit: '%', diff: (latest.muscle - prev.muscle).toFixed(1) },
+                { label: '年齢', val: latest.age, unit: '才', diff: (latest.age - prev.age) }
+            ];
+
+            const grid = document.getElementById('statsGrid');
+            grid.innerHTML = stats.map(s => `
+                <div class="card p-4">
+                    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-tight mb-1">${s.label}</p>
+                    <div class="flex items-baseline gap-0.5">
+                        <span class="text-xl font-bold text-gray-800">${s.val}</span>
+                        <span class="text-[10px] text-gray-400 font-semibold">${s.unit}</span>
+                    </div>
+                    <p class="text-[10px] mt-1 font-bold ${s.diff <= 0 ? 'text-green-500' : 'text-red-400'}">
+                        ${s.diff > 0 ? '▲' : '▼'} ${Math.abs(s.diff)}
+                    </p>
+                </div>
+            `).join('');
+        }
+
+        function updateTable() {
+            const body = document.getElementById('dataTableBody');
+            body.innerHTML = [...history].reverse().map(item => `
+                <tr class="hover:bg-gray-50">
+                    <td class="py-4 px-4 font-medium text-gray-900">${item.date.slice(5)}</td>
+                    <td class="py-4 px-4 text-right font-semibold">${item.weight}</td>
+                    <td class="py-4 px-4 text-right text-gray-500">${item.fat}%</td>
+                    <td class="py-4 px-4 text-right text-gray-500">${item.muscle}%</td>
+                </tr>
+            `).join('');
+        }
+
+        function renderCharts() {
+            const ctx1 = document.getElementById('weightChart').getContext('2d');
+            const ctx2 = document.getElementById('compositionChart').getContext('2d');
+            const labels = history.map(d => d.date.slice(5)); // Show MM-DD
+
+            if (weightChart) weightChart.destroy();
+            if (compositionChart) compositionChart.destroy();
+
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { ticks: { font: { size: 10 } } }
+                }
+            };
+
+            weightChart = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [{
+                        data: history.map(d => d.weight),
+                        borderColor: '#3b82f6',
+                        borderWidth: 3,
+                        backgroundColor: (context) => {
+                            const gradient = context.chart.ctx.createLinearGradient(0, 0, 0, 400);
+                            gradient.addColorStop(0, 'rgba(59, 130, 246, 0.2)');
+                            gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
+                            return gradient;
+                        },
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0,
+                        pointHitRadius: 20
+                    }]
+                },
+                options: chartOptions
+            });
+
+            compositionChart = new Chart(ctx2, {
+                type: 'line',
+                data: {
+                    labels,
+                    datasets: [
+                        { label: '脂肪', data: history.map(d => d.fat), borderColor: '#ef4444', borderWidth: 2, tension: 0.4, pointRadius: 0 },
+                        { label: '筋肉', data: history.map(d => d.muscle), borderColor: '#10b981', borderWidth: 2, tension: 0.4, pointRadius: 0 }
+                    ]
+                },
+                options: { ...chartOptions, plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } } } }
+            });
+        }
+
+        function resetData() {
+            if (confirm('全てのデータを削除してサンプルに戻しますか？')) {
+                localStorage.removeItem('health_history');
+                history = [...initialData];
+                updateUI();
+            }
+        }
+
+        document.getElementById('healthForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const newData = {
+                date: document.getElementById('input_date').value,
+                weight: parseFloat(document.getElementById('input_weight').value),
+                fat: parseFloat(document.getElementById('input_fat').value),
+                muscle: parseFloat(document.getElementById('input_muscle').value),
+                age: parseInt(document.getElementById('input_age').value) || 0,
+                v_fat: parseInt(document.getElementById('input_v_fat').value) || 0,
+                bmi: parseFloat(document.getElementById('input_bmi').value) || 0,
+            };
+            history.push(newData);
+            updateUI();
+            toggleModal('entryModal');
+            e.target.reset();
+        });
+
+        window.onload = updateUI;
+    </script>
+</body>
+</html>
